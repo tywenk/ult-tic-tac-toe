@@ -1,64 +1,77 @@
-from enum import Enum
-from typing import Tuple
+from __future__ import annotations
 
-from fastapi import FastAPI, Query
+from enum import Enum
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, PositiveInt
 
 app = FastAPI()
 
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:5500",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class Status(Enum):
     PENDING = "pending"
-    DONE = "done"
-
-
-class CellState(Enum):
+    TIED = "tied"
     O = "O"  # noqa
     X = "X"
-    EMPTY = "empty"
 
 
 class Player(Enum):
     O = "O"  # noqa
     X = "X"
 
+    def other(self) -> Player:
+        return Player.O if self == Player.X else Player.X
+
 
 class Cell(BaseModel):
-    cell_state: CellState
+    status: Status
 
 
 class Quadrant(BaseModel):
-    quad_state: list[Cell]
-    quad_status: Status
+    state: list[Cell]
+    status: Status
     is_interactive: bool
-    winner: Player | None
 
 
 class Board(BaseModel):
-    board_state: list[Quadrant]
-    board_status: Status
+    state: list[Quadrant]
+    status: Status
     next_player: Player
-    winner: Player | None
+
+    @classmethod
+    def new(self) -> Board:
+        return Board(
+            state=[
+                Quadrant(
+                    state=[Cell(status=Status.PENDING) for _ in range(9)],
+                    status=Status.PENDING,
+                    is_interactive=True,
+                )
+                for _ in range(9)
+            ],
+            status=Status.PENDING,
+            next_player=Player.X,
+        )
 
 
 # Create an empty board on server startup
-board = Board(
-    board_state=[
-        Quadrant(
-            quad_state=[Cell(cell_state=CellState.EMPTY) for _ in range(9)],
-            quad_status=Status.PENDING,
-            is_interactive=True,
-        )
-        for _ in range(9)
-    ],
-    board_status=Status.PENDING,
-    next_player=Player.X,
-)
-
-
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+board = Board.new()
 
 
 @app.get("/board", response_model=Board)
@@ -67,16 +80,16 @@ async def get_board():
 
 
 def is_valid_move(quadrant: Quadrant, cell: Cell) -> bool:
-    return quadrant.is_interactive and cell.cell_state == CellState.EMPTY
+    return quadrant.is_interactive and cell.status is Status.PENDING
 
 
 def is_valid_player(player: Player) -> bool:
     return player == board.next_player
 
 
-def determine_quad_status(player: Player, quadrant: Quadrant) -> Tuple[Status, bool]:
+def determine_item_status(player: Player, *, item: Quadrant | Board) -> Status:
     players_selections_set = set(
-        cell for cell in quadrant.quad_state if cell.cell_state == player
+        idx for idx, cell in enumerate(item.state) if cell.status == player
     )
 
     winning_sets = [
@@ -95,11 +108,11 @@ def determine_quad_status(player: Player, quadrant: Quadrant) -> Tuple[Status, b
     )
 
     if is_player_won:
-        return (Status.DONE, True)
-    if sum(quadrant.quad_state, lambda cell: cell.cell_state != CellState.EMPTY) == 9:
-        return (Status.DONE, False)
+        return player
+    if all(_.status != Status.PENDING for _ in item.state):
+        return Status.TIED
     else:
-        return (Status.PENDING, False)
+        return Status.PENDING
 
 
 @app.put("/board", response_model=Board)
@@ -108,33 +121,49 @@ async def update_board(
     quad_index: PositiveInt = Query(ge=0, lt=9),
     cell_index: PositiveInt = Query(ge=0, lt=9),
 ):
-    quadrant = board.board_state[quad_index]
-    cell = quadrant.quad_state[cell_index]
+    quadrant = board.state[quad_index]
+    cell = quadrant.state[cell_index]
 
     # Validate that the player is allowed to make a move
-    if not is_valid_move(quadrant, cell) or not is_valid_player(player):
-        raise Exception("Player or move is not valid")
+    if not is_valid_move(quadrant, cell):
+        raise HTTPException(status_code=400, detail="Move is not valid")
+
+    if not is_valid_player(player):
+        raise HTTPException(status_code=400, detail="Player is not valid")
+
+    # Validate that a player has not won
+    if board.status != Status.PENDING:
+        raise HTTPException(status_code=400, detail="Someone has already won")
 
     # Check and update cell status
-    cell.cell_state = player
+    cell.status = player
 
     # Check and update qudarant status
-    # check if quad was won/tied
-    quad_status, is_player_winner = determine_quad_status(player, quadrant)
-    quadrant.quad_status = quad_status
-    if is_player_winner:
-        quadrant.winner = player
+    quadrant.status = determine_item_status(player, item=quadrant)
 
-    # get active quad
+    # Normalize interactivity
+    for q in board.state:
+        q.is_interactive = False
 
-    # update which quads are active
+    targeted_quad = board.state[cell_index]
+
+    if targeted_quad.status != Status.PENDING:
+        pending_quads = [q for q in board.state if q.status == Status.PENDING]
+        for q in pending_quads:
+            q.is_interactive = True
+    else:
+        targeted_quad.is_interactive = True
 
     # Check and update board status
+    board.status = determine_item_status(player, item=board)
 
-    #
+    # Update the next player
+    board.next_player = player.other()
+
     return board
 
 
-@app.delete("/board")
+@app.delete("/board", status_code=204, response_model=None)
 async def restart_board():
-    return ""
+    global board
+    board = Board.new()

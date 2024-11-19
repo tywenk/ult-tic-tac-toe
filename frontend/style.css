@@ -1,0 +1,77 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: monospace;
+}
+
+#base {
+  height: 100vh;
+}
+
+.board {
+  margin: 0 auto;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 12px;
+  width: 600px;
+  height: 600px;
+  gap: 2%;
+}
+
+.quadrant {
+  border: solid 1px;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 6px;
+  gap: 5%;
+}
+
+.cell {
+  border: solid black 1px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  padding: 4px;
+  gap: 2%;
+}
+
+[data-is_interactive="false"] {
+  background: gray;
+}
+
+[data-status="pending"] {
+  background: white;
+}
+
+[data-status="X"] {
+  background: lightcoral;
+}
+
+[data-status="O"] {
+  background: cornflowerblue;
+}
+
+[data-status="X"] .cell {
+  opacity: 0.5;
+}
+
+[data-status="O"] .cell {
+  opacity: 0.5;
+}
+
+[data-status="X"] .quadrant {
+  opacity: 0.5;
+}
+
+[data-status="O"] .quadrant {
+  opacity: 0.5;
+}
+
+[data-status="tied"] {
+  background: gray;
+}
+
+[data-is_interactive="true"] {
+  background: yellow;
+}
