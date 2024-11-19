@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+.venv/
+.env
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log
+yarn-error.log
+*.log
+
+# General
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+*.class
+*.project
+*.sublime-workspace
+*.sublime-project
+*.log
+*.tmp
+*.temp
+
