@@ -55,7 +55,7 @@ class Board(BaseModel):
     next_player: Player
 
     @classmethod
-    def new(self) -> Board:
+    def new(cls) -> Board:
         return Board(
             state=[
                 Quadrant(
